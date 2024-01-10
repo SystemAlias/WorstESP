@@ -1,78 +1,55 @@
 #include "Memory.hpp"
 
-/*
-I discovered with this idea a while ago when experimenting with Team Fortress 2.
-I'm quite surprised it's still effective on Source 2. This concept might have been implemented before,
-but here is my version of it.
-
-TL;DR: I just wanted to create a PoC.
-*/
-
 class CLogic {
 public:
-    CLogic() {
-        std::cout << "[IMPORTANT]\n Attention, probably a Russian, press the RIGHT Arrow to toggle between teams!\n"
+    CLogic()
+        : MemoryHandler(std::make_unique<ProcessMemoryHandler>("cs2.exe", "client.dll")) {
+        std::cout << "[IMPORTANT] Attention, press the RIGHT Arrow to toggle between teams!\n"
             << "A '.' indicates that 'm_iTeamNum' has not yet been changed, so we're continuously sending WPM until it is.\n"
-            << "Remember, the game will behave as if you are on the opposite team when 'spoofed'\nmeaning all VGUI elements will react accordingly\n\n\nOutput:";
-
-        MemoryHandler = new ProcessMemoryHandler("cs2.exe", "client.dll");
+            << "Remember, the game will behave as if you are on the opposite team when 'spoofed'\n"
+            << "meaning all VGUI elements will react accordingly\nIf not already enabled, I recommend putting '+cl_show_team_equipment' in your console.\n\n\nOutput:";
     }
-    void ToggleLoop() {
-        int iSpoofNum = 3;
 
-        while (1) {
+    void ToggleLoop() {
+        constexpr int TEAM_2 = 2;
+        constexpr int TEAM_3 = 3;
+        constexpr int TIMEOUT_LIMIT = 64;
+        constexpr auto SLEEP_DURATION = std::chrono::milliseconds(50);
+
+        constexpr DWORD dwLocalPlayerController = 0x1810F48;
+        constexpr DWORD m_iTeamNum = 0x3BF;
+
+        int iSpoofNum = TEAM_3;
+
+        while (true) {
             DWORD_PTR pLocalPlayer = MemoryHandler->readMemory<DWORD_PTR>(MemoryHandler->clientBaseAddress + dwLocalPlayerController);
 
-            if ((GetAsyncKeyState(VK_RIGHT) & 0x8000)) {  // You could get the original value by reading then caching it,
-                // but if you're interested in improving this, go ahead
-                switch (iSpoofNum) {
-                case 2:
-                    iSpoofNum = 3;
-                    break;
-
-                case 3:
-                    iSpoofNum = 2;
-                    break;
-                }
-                std::cout << "[!] changing m_iTeamNum -> "
+            if ((GetAsyncKeyState(VK_RIGHT) & 0x8000)) {
+                iSpoofNum = (iSpoofNum == TEAM_2) ? TEAM_3 : TEAM_2;
+                std::cout << "\n[!] changing m_iTeamNum -> "
                     << MemoryHandler->readMemory<int>(pLocalPlayer + m_iTeamNum)
                     << " -> " << iSpoofNum << "\n";
+                Beep(1000, 100);
             }
-
-
-            // Even though I am noob, this level of API spam makes me feel uncomfortable 
-            // But here is my reasoning, for some reason the game likes to randomly reset the value or only accept the change at certain points
-            // after a few write attempts it seems to stay set, I don't know the reason for this.
-            // as a safety precaution we will sleep and have a 'timeout'.
 
             int iTimeOut = 0;
-            while (MemoryHandler->readMemory<int>(pLocalPlayer + m_iTeamNum) != iSpoofNum && iTimeOut < 64) {
-                MemoryHandler->writeMemory<int>(
-                    (pLocalPlayer + m_iTeamNum),
-                    iSpoofNum);
-
+            while (MemoryHandler->readMemory<int>(pLocalPlayer + m_iTeamNum) != iSpoofNum && iTimeOut < TIMEOUT_LIMIT) {
+                MemoryHandler->writeMemory<int>((pLocalPlayer + m_iTeamNum), iSpoofNum);
                 std::cout << ".";
-                iTimeOut += 1;
-                Sleep(50);
+                iTimeOut++;
+                std::this_thread::sleep_for(SLEEP_DURATION);
             }
 
-            Sleep(100); // CPU pain relief
+            std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Reduce CPU usage
         }
-
-        std::cout.flush();
-
-        delete MemoryHandler;
-
     }
+
 private:
-    ProcessMemoryHandler* MemoryHandler;
+    std::unique_ptr<ProcessMemoryHandler> MemoryHandler;
 };
 
-
-
-
 int main() {
-    CLogic logic = CLogic();
+    CLogic logic;
     logic.ToggleLoop();
 
     return 0;

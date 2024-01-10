@@ -3,12 +3,13 @@
 #include <TlHelp32.h>
 #include <iostream>
 #include <string>
-
-DWORD dwLocalPlayerController = 0x1810F48;
-DWORD m_iTeamNum = 0x3BF;
+#include <memory>
+#include <chrono>
+#include <thread>
 
 class ProcessMemoryHandler {
 public:
+
     ProcessMemoryHandler(const std::string& processName, const std::string& moduleName)
         : processName(processName), moduleName(moduleName), hProcess(nullptr) {
         attachToProcess();
@@ -39,12 +40,18 @@ private:
 
     void attachToProcess() {
         DWORD pid = getProcessIdByName(processName);
-        hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
+        if (pid == 0) {
+            std::cerr << "[ERROR] Process '" << processName << "' not found." << std::endl;
+            throw std::runtime_error("Process not found.");
+        }
+
+        hProcess = OpenProcess(PROCESS_VM_READ | PROCESS_VM_WRITE | PROCESS_VM_OPERATION, FALSE, pid);
         if (hProcess == nullptr) {
-            std::cout << "[FATAL] Failed to find process, closing down, please ensure CS2.exe is open!" << std::endl;
-            exit(-1);
+            std::cerr << "[ERROR] Failed to open process. Error Code: " << GetLastError() << std::endl;
+            throw std::runtime_error("Failed to open process.");
         }
     }
+
 
     DWORD getProcessIdByName(const std::string& name) {
         PROCESSENTRY32 entry;
