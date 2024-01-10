@@ -11,6 +11,7 @@ public:
     }
 
     void ToggleLoop() {
+        SetConsoleTitle("");
         constexpr int TEAM_2 = 2;
         constexpr int TEAM_3 = 3;
         constexpr int TIMEOUT_LIMIT = 64;
